@@ -2,6 +2,7 @@
 local rs = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Teams = game:GetService("Teams")
+local light = game:GetService("Lighting")
 local Player = Players.LocalPlayer
 local chr = Player.Character
 local hum = chr.Humanoid
@@ -44,19 +45,38 @@ local FOVRadius = 100
 local LockTarget = "HumanoidRootPart"
 local LockEnabled = false
 
-local function getNearestPlayer()
+local TeamCheckEnabled = false
+
+Aimbot:AddToggle('TeamCheckToggle', {
+    Text = 'Team Check',
+    Default = false,
+    Tooltip = 'Toggle to enable or disable team check',
+
+    Callback = function(Value)
+        TeamCheckEnabled = Value
+    end
+})
+
+local function isOnSameTeam(player1, player2)
+    return player1.Team == player2.Team
+end
+
+local function getNearestPlayerToMouse()
     local closestPlayer = nil
     local closestDistance = math.huge
     local mousePos = Vector2.new(mouse.X, mouse.Y)
     
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player and player.Character and player.Character:FindFirstChild(LockTarget) then
-            local screenPoint, onScreen = cam:WorldToViewportPoint(player.Character[LockTarget].Position)
-            if onScreen then
-                local distance = (mousePos - Vector2.new(screenPoint.X, screenPoint.Y)).Magnitude
-                if distance < closestDistance and distance <= FOVRadius then
-                    closestDistance = distance
-                    closestPlayer = player
+            if not TeamCheckEnabled or (TeamCheckEnabled and not isOnSameTeam(Player, player)) then
+                local targetPart = player.Character[LockTarget]
+                local screenPoint, onScreen = cam:WorldToViewportPoint(targetPart.Position)
+                if onScreen then
+                    local distance = (mousePos - Vector2.new(screenPoint.X, screenPoint.Y)).Magnitude
+                    if distance < closestDistance and distance <= FOVRadius then
+                        closestDistance = distance
+                        closestPlayer = player
+                    end
                 end
             end
         end
@@ -92,12 +112,13 @@ Aimbot:AddDropdown('LockTargetDropdown', {
 Aimbot:AddToggle('LockToggle', {
     Text = 'Enabled',
     Default = false,
+    Tooltip = 'Toggle to enable or disable lock-on feature',
 
     Callback = function(Value)
         LockEnabled = Value
     end
 }):AddKeyPicker('LockOnKey', {
-    Default = 'MB2',
+    Default = 'V',
     SyncToggleState = false,
     Mode = 'Toggle',
     Text = 'Lock on Nearest Player',
@@ -106,11 +127,16 @@ Aimbot:AddToggle('LockToggle', {
     Callback = function(isPressed)
         if LockEnabled then
             if isPressed then
-                local targetPlayer = getNearestPlayer()
+                local targetPlayer = getNearestPlayerToMouse()
                 if targetPlayer then
                     lock = rs.Heartbeat:Connect(function()
                         if targetPlayer.Character and targetPlayer.Character:FindFirstChild(LockTarget) then
                             cam.CFrame = CFrame.new(cam.CFrame.Position, targetPlayer.Character[LockTarget].Position)
+                            local humanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+                            if humanoid and humanoid.Health <= 0 then
+                                lock:Disconnect()
+                                lock = nil
+                            end
                         else
                             lock:Disconnect()
                             lock = nil
@@ -431,6 +457,251 @@ Self:AddToggle('noclip', {
 -- // END OF SELF
 -- // END OF PLAYERS
 
+
+-- // VISUAL
+
+local esp = Tabs.Visual:AddLeftGroupbox('ESP')
+
+local wtvp = cam.WorldToViewportPoint
+
+local headoff = Vector3.new(0, 0.5, 0)
+local legoff = Vector3.new(0, 3, 0)
+
+local ESPEnabled = false
+local BoxEnabled = false
+local BoxOutlineEnabled = false
+local HealthBarEnabled = false
+local HealthBarOutlineEnabled = false
+
+local BoxColor = Color3.fromRGB(255, 255, 255)
+local BoxOutlineColor = Color3.fromRGB(0, 0, 0)
+local HealthBarColor = Color3.fromRGB(0, 255, 0)
+local HealthBarOutlineColor = Color3.fromRGB(0, 0, 0)
+
+local function createESP(v)
+    local BoxOutline = Drawing.new("Square")
+    BoxOutline.Visible = false
+    BoxOutline.Color = BoxOutlineColor
+    BoxOutline.Thickness = 2
+    BoxOutline.Transparency = 1
+    BoxOutline.Filled = false
+
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Color = BoxColor
+    box.Thickness = 1
+    box.Transparency = 1
+    box.Filled = false
+
+    local healthBarOutline = Drawing.new("Line")
+    healthBarOutline.Visible = false
+    healthBarOutline.Color = HealthBarOutlineColor
+    healthBarOutline.Thickness = 4
+    healthBarOutline.Transparency = 1
+
+    local healthBar = Drawing.new("Line")
+    healthBar.Visible = false
+    healthBar.Color = HealthBarColor
+    healthBar.Thickness = 2
+    healthBar.Transparency = 1
+
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if ESPEnabled and v.Character and v.Character:FindFirstChild("Humanoid") and v ~= Player and v.Character.Humanoid.Health > 0 then
+            local vector, onscreen = cam:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+
+            local root = v.Character.HumanoidRootPart
+            local head = v.Character.Head
+            local RootPos = wtvp(cam, root.Position)
+            local HeadPos = wtvp(cam, head.Position + headoff)
+            local LegPos = wtvp(cam, root.Position - legoff)
+
+            if onscreen then
+                if BoxOutlineEnabled then
+                    BoxOutline.Size = Vector2.new(1000 / RootPos.Z, HeadPos.Y - LegPos.Y)
+                    BoxOutline.Position = Vector2.new(RootPos.X - BoxOutline.Size.X / 2, RootPos.Y - BoxOutline.Size.Y / 2)
+                    BoxOutline.Color = BoxOutlineColor
+                    BoxOutline.Visible = true
+                else
+                    BoxOutline.Visible = false
+                end
+
+                if BoxEnabled then
+                    box.Size = Vector2.new(1000 / RootPos.Z, HeadPos.Y - LegPos.Y)
+                    box.Position = Vector2.new(RootPos.X - box.Size.X / 2, RootPos.Y - box.Size.Y / 2)
+                    box.Color = BoxColor
+                    box.Visible = true
+                else
+                    box.Visible = false
+                end
+
+                if HealthBarOutlineEnabled then
+                    local health = v.Character.Humanoid.Health / v.Character.Humanoid.MaxHealth
+                    healthBarOutline.From = Vector2.new(RootPos.X - BoxOutline.Size.X / 2 - 5, RootPos.Y - BoxOutline.Size.Y / 2 + 1)
+                    healthBarOutline.To = Vector2.new(RootPos.X - BoxOutline.Size.X / 2 - 5, RootPos.Y - BoxOutline.Size.Y / 2 + (HeadPos.Y - LegPos.Y) + 1)
+                    healthBarOutline.Color = HealthBarOutlineColor
+                    healthBarOutline.Visible = true
+                else
+                    healthBarOutline.Visible = false
+                end
+
+                if HealthBarEnabled then
+                    local health = v.Character.Humanoid.Health / v.Character.Humanoid.MaxHealth
+                    healthBar.From = Vector2.new(RootPos.X - BoxOutline.Size.X / 2 - 5, RootPos.Y - BoxOutline.Size.Y / 2)
+                    healthBar.To = Vector2.new(RootPos.X - BoxOutline.Size.X / 2 - 5, RootPos.Y - BoxOutline.Size.Y / 2 + (HeadPos.Y - LegPos.Y) * health)
+                    healthBar.Color = HealthBarColor
+                    healthBar.Visible = true
+                else
+                    healthBar.Visible = false
+                end
+            else
+                BoxOutline.Visible = false
+                box.Visible = false
+                healthBar.Visible = false
+                healthBarOutline.Visible = false
+            end
+        else
+            BoxOutline.Visible = false
+            box.Visible = false
+            healthBar.Visible = false
+            healthBarOutline.Visible = false
+        end
+    end)
+end
+
+for i, v in pairs(game.Players:GetChildren()) do
+    createESP(v)
+end
+
+game.Players.PlayerAdded:Connect(function(v)
+    createESP(v)
+end)
+
+esp:AddToggle('ESP', {
+    Text = 'Enable ESP',
+    Default = false,
+    Tooltip = 'Toggle to enable or disable ESP',
+    Callback = function(val)
+        ESPEnabled = val
+    end
+})
+
+esp:AddToggle('Box', {
+    Text = 'Enable Box',
+    Default = false,
+    Tooltip = 'Toggle to enable or disable Box',
+    Callback = function(val)
+        BoxEnabled = val
+    end
+}):AddColorPicker('BoxColorPicker', {
+    Default = Color3.fromRGB(255, 255, 255),
+    Title = 'Box color',
+    Transparency = 1,
+
+    Callback = function(Value)
+        BoxColor = Value
+    end
+})
+
+esp:AddToggle('BoxOutline', {
+    Text = 'Enable Box Outline',
+    Default = false,
+    Tooltip = 'Toggle to enable or disable Box Outline',
+    Callback = function(val)
+        BoxOutlineEnabled = val
+    end
+}):AddColorPicker('BoxOutlineColorPicker', {
+    Default = Color3.fromRGB(0, 0, 0),
+    Title = 'Box Outline color',
+    Transparency = 1,
+
+    Callback = function(Value)
+        BoxOutlineColor = Value
+    end
+})
+
+esp:AddToggle('HealthBar', {
+    Text = 'Enable Health Bar',
+    Default = false,
+    Tooltip = 'Toggle to enable or disable Health Bar',
+    Callback = function(val)
+        HealthBarEnabled = val
+    end
+}):AddColorPicker('HealthBarColorPicker', {
+    Default = Color3.fromRGB(0, 255, 0),
+    Title = 'Health Bar color',
+    Transparency = 1,
+
+    Callback = function(Value)
+        HealthBarColor = Value
+    end
+})
+
+esp:AddToggle('HealthBarOutline', {
+    Text = 'Enable Health Bar Outline',
+    Default = false,
+    Tooltip = 'Toggle to enable or disable Health Bar Outline',
+    Callback = function(val)
+        HealthBarOutlineEnabled = val
+    end
+}):AddColorPicker('HealthBarOutlineColorPicker', {
+    Default = Color3.fromRGB(0, 0, 0),
+    Title = 'Health Bar Outline color',
+    Transparency = 1,
+
+    Callback = function(Value)
+        HealthBarOutlineColor = Value
+    end
+})
+
+-- // ENVIRONMENT
+local Env = Tabs.Visual:AddLeftGroupbox('Environment')
+
+Env:AddSlider('TimeOfDay', {
+    Text = 'Time Of Day',
+    Default = light.ClockTime,
+    Min = 0,
+    Max = 24,
+    Rounding = 0,
+    Compact = false,
+
+    Callback = function(val)
+        light.ClockTime = val
+    end
+})
+
+Env:AddSlider('FogStart', {
+    Text = 'Fog Start',
+    Default = light.FogStart,
+    Min = 0,
+    Max = 5000,
+    Rounding = 0,
+    Compact = false,
+
+    Callback = function(val)
+        light.FogStart = val
+    end
+})
+Env:AddSlider('FogEnd', {
+    Text = 'Fog End',
+    Default = light.FogEnd,
+    Min = 0,
+    Max = 512,
+    Rounding = 0,
+    Compact = false,
+
+    Callback = function(val)
+        light.FogEnd = val
+    end
+})
+Env:AddLabel('Fog Color'):AddColorPicker('FogColor', {
+    Default = light.FogColor,
+    Title = 'Fog Color',
+    Transparency = 1,
+
+    Callback = function(val)
+        light.FogColor = val
+    end
+})
 -- // SCRIPTS
 local Scripts = Tabs.Scripts:AddLeftGroupbox('Scripts')
 Scripts:AddButton({
