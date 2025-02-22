@@ -83,7 +83,7 @@ Self:AddSlider('Walkspeed', {
 -- JUMP POWER
 Self:AddSlider('JumpPower', {
     Text = 'Jump Power',
-    Default = 16,
+    Default = 50,
     Min = 0,
     Max = 512,
     Rounding = 1,
