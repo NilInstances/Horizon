@@ -1,5 +1,8 @@
+local repo = "https://raw.githubusercontent.com/NilInstances/Horizon/refs/heads/main"
+local function l(o) loadstring(game:HttpGet(o))() end
+
 if game.PlaceId = "10449761463" then
-loadstring(game:HttpGet("https://raw.githubusercontent.com/NilInstances/Horizon/refs/heads/main/TSB.lua"))()
+l(repo.."TSB.lua")
 else
-loadstring(game:HttpGet("https://raw.githubusercontent.com/NilInstances/Horizon/refs/heads/main/Universal.lua"))()
+l(repo.."Universal.lua")
 end
