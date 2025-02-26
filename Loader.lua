@@ -1,16 +1,6 @@
 local repo = "https://raw.githubusercontent.com/NilInstances/Horizon/refs/heads/main"
 local function l(o) loadstring(game:HttpGet(o))() end
 
-local isfile = isfile or function(file)
-	local suc, res = pcall(function()
-		return readfile(file)
-	end)
-	return suc and res ~= nil and res ~= ''
-end
-local delfile = delfile or function(file)
-	writefile(file, '')
-end
-
 if identifyexecutor then
 if table.find({'JJSploit'}, ({identifyexecutor()})[1]) then
 warn("Fuck you im not loading your script")
@@ -43,6 +33,7 @@ end)
   elseif table.find({'Argon', 'Wave'}, ({identifyexecutor()})[1]) then
 		getgenv().setthreadidentity = nil
   end
+end
 
 if game.PlaceId = "10449761463" then
 l(repo.."TSB.lua")
